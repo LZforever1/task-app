@@ -1,6 +1,4 @@
 import os
-os.environ['KIVY_TEXT'] = 'pil'
-
 import json
 import sys
 import re
@@ -24,8 +22,7 @@ from kivy.utils import platform
 from kivy.clock import Clock
 from kivy.graphics import Color, RoundedRectangle, Line
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.core.text import LabelBase, DEFAULT_FONT
-from kivy.resources import resource_add_path
+from kivy.core.text import LabelBase
 from kivy.lang import Builder
 from kivy.metrics import dp
 
@@ -39,23 +36,25 @@ if platform == "win":
     for fp in font_paths:
         if os.path.exists(fp):
             try:
-                LabelBase.register(DEFAULT_FONT, fp)
+                LabelBase.register("ChineseFont", fp)
                 break
             except:
                 continue
 elif platform == "android":
-    LabelBase.register(DEFAULT_FONT, "DroidSansFallback.ttf")
+    font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "msyh.ttc")
+    if os.path.exists(font_path):
+        LabelBase.register("ChineseFont", font_path)
+    else:
+        LabelBase.register("ChineseFont", "Roboto")
 
 if platform == "android":
-    from android.storage import app_storage_path
     from jnius import autoclass
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     from android import activity
     Intent = autoclass('android.content.Intent')
-    Uri = autoclass('android.net.Uri')
     FileOutputStream = autoclass('java.io.FileOutputStream')
-    InputStream = autoclass('java.io.InputStream')
-    Permission = None  # 权限请求可稍后添加，当前简化处理
+    Context = autoclass('android.content.Context')
+    NotificationBuilder = autoclass('android.app.Notification$Builder')
 
 # ========== 全局样式 ==========
 Builder.load_string('''
@@ -65,6 +64,7 @@ Builder.load_string('''
     font_size: '14sp'
     size_hint_y: None
     height: '44dp'
+    font_name: 'ChineseFont'
 
 <TextInput>:
     background_normal: ''
@@ -75,6 +75,7 @@ Builder.load_string('''
     font_size: '14sp'
     padding: [12, 0]
     multiline: False
+    font_name: 'ChineseFont'
 
 <Popup>:
     background: ''
@@ -116,17 +117,21 @@ BACKUP_FILE = "tasks_backup.json"
 
 def get_data_path():
     if platform == "android":
-        return os.path.join(app_storage_path(), DATA_FILE)
+        # 使用 Kivy 用户目录，避免导入 app_storage_path 可能失败
+        user_data_dir = os.environ.get('ANDROID_PRIVATE', '')
+        return os.path.join(user_data_dir, DATA_FILE)
     return DATA_FILE
 
 def get_backup_path():
     if platform == "android":
-        return os.path.join(app_storage_path(), BACKUP_FILE)
+        user_data_dir = os.environ.get('ANDROID_PRIVATE', '')
+        return os.path.join(user_data_dir, BACKUP_FILE)
     return BACKUP_FILE
 
 def get_image_dir():
     if platform == "android":
-        img_dir = os.path.join(app_storage_path(), "images")
+        user_data_dir = os.environ.get('ANDROID_PRIVATE', '')
+        img_dir = os.path.join(user_data_dir, "images")
     else:
         img_dir = "images"
     if not os.path.exists(img_dir):
@@ -527,7 +532,7 @@ class MainScreen(Screen):
             PythonActivity.mActivity.startActivityForResult(intent, 1001)
 
     def on_activity_result(self, request_code, result_code, data):
-        if request_code == 1001 and result_code == -1:  # RESULT_OK
+        if request_code == 1001 and result_code == -1:
             uri = data.getData()
             if uri:
                 try:
